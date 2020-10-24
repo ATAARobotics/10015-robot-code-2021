@@ -94,26 +94,65 @@ public class StoneOrientationExample extends LinearOpMode
             sleep(20);
 
             // Figure out which stones the pipeline detected, and print them to telemetry
-            ArrayList<StoneOrientationAnalysisPipeline.AnalyzedStone> stones = pipeline.getDetectedStones();
-            if(stones.isEmpty())
-            {
+
+
+            telemetry.addLine("StartingState" + GetStartingState());
+            telemetry.addLine("Big Area:" + StoneOrientationAnalysisPipeline.finalArea);
+            telemetry.update();
+        }
+    }
+    enum StartingState{
+        ZEROA,
+        ONEB,
+        FOURC,
+        UGLYANDFAT
+    }
+
+    private StartingState GetStartingState(){
+        float minB = 0.2f;
+        float maxBMinC = 0.7f;
+        float maxC = 10.0f;//10.0f;
+        double averageSlope = 0.0;
+        ArrayList<StoneOrientationAnalysisPipeline.AnalyzedStone> stones1 = pipeline.getDetectedStones();
+        ArrayList<StoneOrientationAnalysisPipeline.AnalyzedStone> stones2 = pipeline.getDetectedStones();
+        ArrayList<StoneOrientationAnalysisPipeline.AnalyzedStone> stones3 = pipeline.getDetectedStones();
+        ArrayList[] stones = {stones1, stones2, stones3};
+        double[] slopeAverage = new double [stones.length];
+
+        for (int i = 0; i < stones.length; i++) {
+
+
+            if (stones[i].isEmpty()) {
                 telemetry.addLine("No stones detected");
-            }
-            else
-            {
-                for(StoneOrientationAnalysisPipeline.AnalyzedStone stone : stones)
-                {
-                    telemetry.addLine(String.format("Stone: Orientation=%s, Angle=%f", stone.orientation.toString(), stone.angle));
-                    telemetry.addLine("midlineSlope:" + stone.midlineSlope);
+            } else {
+                for (Object toStone : stones[i]) {
+                    StoneOrientationAnalysisPipeline.AnalyzedStone stone = (StoneOrientationAnalysisPipeline.AnalyzedStone)toStone;
+                    slopeAverage[i] = stone.midlineSlope;
                 }
             }
+        }
+        for (int i = 0; i < slopeAverage.length; i++){
+            averageSlope += slopeAverage[i];
+        }
 
-            telemetry.update();
+        averageSlope = averageSlope/slopeAverage.length;
+        telemetry.addLine("midlineSlope:" + (Math.round(averageSlope*100.0)/100.0));
+
+        if(minB < averageSlope && averageSlope < maxBMinC){
+            return StartingState.ONEB;
+        }
+        else if(maxBMinC < averageSlope && averageSlope < maxC){
+            return StartingState.FOURC;
+        }
+
+        else{
+            return StartingState.ZEROA;
         }
     }
 
     static class StoneOrientationAnalysisPipeline extends OpenCvPipeline
     {
+        public static double finalArea;
         /*
          * Our working image buffers
          */
@@ -126,7 +165,7 @@ public class StoneOrientationExample extends LinearOpMode
         /*
          * Threshold values
          */
-        static final int CB_CHAN_MASK_THRESHOLD = 80;
+        static final int CB_CHAN_MASK_THRESHOLD = 102;// 102 for goodness, 70 ignores skin colors, 65 does not work as well, but ignores some but not sll yellow
         static final double DENSITY_UPRIGHT_THRESHOLD = 0.03;
 
         /*
@@ -143,6 +182,7 @@ public class StoneOrientationExample extends LinearOpMode
         static final Scalar RED = new Scalar(255, 0, 0);
         static final Scalar GREEN = new Scalar(0, 255, 0);
         static final Scalar BLUE = new Scalar(0, 0, 255);
+        //static final Scalar YELLOW = new Scalar()
 
         static final int CONTOUR_LINE_THICKNESS = 2;
         static final int CB_CHAN_IDX = 2;
@@ -309,7 +349,7 @@ public class StoneOrientationExample extends LinearOpMode
 
             // Figure out the slope of a line which would run through the middle, lengthwise
             // (Slope as in m from 'Y = mx + b')
-            double midlineSlope = Math.tan(Math.toRadians(rotRectAngle));
+            double midlineSlope = rotatedRectFitToContour.size.height / rotatedRectFitToContour.size.width;
             //AnalyzedStone.midlineSlope = midlineSlope;    //this.midlineSlope is for the class on the top, the other one is for the local variable
             // We're going to split the this contour into two regions: one region for the points
             // which fall above the midline, and one region for the points which fall below.
@@ -357,25 +397,25 @@ public class StoneOrientationExample extends LinearOpMode
                  */
 
                 // Draw that line we were just talking about
-                Imgproc.line(
-                        input, // Buffer we're drawing on
-                        new Point( // First point of the line (center of bounding rect)
-                                rotatedRectFitToContour.center.x,
-                                rotatedRectFitToContour.center.y),
-                        new Point( // Second point of the line (center - displacement we calculated earlier)
-                                rotatedRectFitToContour.center.x-displOfOrientationLinePoint2.x,
-                                rotatedRectFitToContour.center.y-displOfOrientationLinePoint2.y),
-                        PURPLE, // Color we're drawing the line in
-                        2); // Thickness of the line we're drawing
+//                Imgproc.line(
+//                        input, // Buffer we're drawing on
+//                        new Point( // First point of the line (center of bounding rect)
+//                                rotatedRectFitToContour.center.x,
+//                                rotatedRectFitToContour.center.y),
+//                        new Point( // Second point of the line (center - displacement we calculated earlier)
+//                                rotatedRectFitToContour.center.x-displOfOrientationLinePoint2.x,
+//                                rotatedRectFitToContour.center.y-displOfOrientationLinePoint2.y),
+//                        PURPLE, // Color we're drawing the line in
+//                        2); // Thickness of the line we're drawing
 
                 // We outline the contour region that we assumed to be the side with the nubs
-                Imgproc.drawContours(input, aboveMidlineMetrics.listHolderOfMatOfPoint, -1, TEAL, 2, 8);
+//                Imgproc.drawContours(input, aboveMidlineMetrics.listHolderOfMatOfPoint, -1, TEAL, 2, 8);
 
                 // Compute the absolute angle of the stone
                 double angle = -(rotRectAngle-90);
 
                 // "Tag" the stone with text stating its absolute angle
-                drawTagText(rotatedRectFitToContour, Integer.toString((int) Math.round(angle))+" deg", input);
+//                drawTagText(rotatedRectFitToContour, Integer.toString((int) Math.round(angle))+" deg", input);
 
                 AnalyzedStone analyzedStone = new AnalyzedStone();
                 analyzedStone.angle = angle;
@@ -392,25 +432,25 @@ public class StoneOrientationExample extends LinearOpMode
                  */
 
                 // Draw that line we were just talking about
-                Imgproc.line(
-                        input, // Buffer we're drawing on
-                        new Point( // First point of the line (center + displacement we calculated earlier)
-                                rotatedRectFitToContour.center.x+displOfOrientationLinePoint2.x,
-                                rotatedRectFitToContour.center.y+displOfOrientationLinePoint2.y),
-                        new Point( // Second point of the line (center of bounding rect)
-                                rotatedRectFitToContour.center.x,
-                                rotatedRectFitToContour.center.y),
-                        PURPLE, // Color we're drawing the line in
-                        2); // Thickness of the line we're drawing
+//                Imgproc.line(
+//                        input, // Buffer we're drawing on
+//                        new Point( // First point of the line (center + displacement we calculated earlier)
+//                                rotatedRectFitToContour.center.x+displOfOrientationLinePoint2.x,
+//                                rotatedRectFitToContour.center.y+displOfOrientationLinePoint2.y),
+//                        new Point( // Second point of the line (center of bounding rect)
+//                                rotatedRectFitToContour.center.x,
+//                                rotatedRectFitToContour.center.y),
+//                        PURPLE, // Color we're drawing the line in
+//                        2); // Thickness of the line we're drawing
 
                 // We outline the contour region that we assumed to be the side with the nubs
-                Imgproc.drawContours(input, belowMidlineMetrics.listHolderOfMatOfPoint, -1, TEAL, 2, 8);
+//                Imgproc.drawContours(input, belowMidlineMetrics.listHolderOfMatOfPoint, -1, TEAL, 2, 8);
 
                 // Compute the absolute angle of the stone
                 double angle = -(rotRectAngle-270);
 
                 // "Tag" the stone with text stating its absolute angle
-                drawTagText(rotatedRectFitToContour,  Integer.toString((int) Math.round(angle))+" deg", input);
+//                drawTagText(rotatedRectFitToContour,  Integer.toString((int) Math.round(angle))+" deg", input);
 
                 AnalyzedStone analyzedStone = new AnalyzedStone();
                 analyzedStone.angle = angle;
@@ -424,7 +464,7 @@ public class StoneOrientationExample extends LinearOpMode
                  * Assume the stone is upright
                  */
 
-                drawTagText(rotatedRectFitToContour, "UPRIGHT", input);
+//                drawTagText(rotatedRectFitToContour, "UPRIGHT", input);
 
                 AnalyzedStone analyzedStone = new AnalyzedStone();
                 analyzedStone.angle = rotRectAngle;
@@ -480,9 +520,10 @@ public class StoneOrientationExample extends LinearOpMode
                 // Compute the hull area
                 analysis.hullArea = Imgproc.contourArea(new MatOfPoint(hullPoints));
 
+
                 // Compute the original contour area
                 analysis.contourArea = Imgproc.contourArea(listHolderOfMatOfPoint.get(0));
-
+                finalArea = analysis.contourArea;
                 // Compute the contour density. This is the ratio of the contour area to the
                 // area of the convex hull formed by the contour
                 analysis.density = analysis.contourArea / analysis.hullArea;
@@ -516,19 +557,19 @@ public class StoneOrientationExample extends LinearOpMode
             return point;
         }
 
-        static void drawTagText(RotatedRect rect, String text, Mat mat)
-        {
-            Imgproc.putText(
-                    mat, // The buffer we're drawing on
-                    text, // The text we're drawing
-                    new Point( // The anchor point for the text
-                            rect.center.x-50,  // x anchor point
-                            rect.center.y+25), // y anchor point
-                    Imgproc.FONT_HERSHEY_PLAIN, // Font
-                    1, // Font size
-                    TEAL, // Font color
-                    1); // Font thickness
-        }
+//        static void drawTagText(RotatedRect rect, String text, Mat mat)
+//        {
+//            Imgproc.putText(
+//                    mat, // The buffer we're drawing on
+//                    text, // The text we're drawing
+//                    new Point( // The anchor point for the text
+//                            rect.center.x-50,  // x anchor point
+//                            rect.center.y+25), // y anchor point
+//                    Imgproc.FONT_HERSHEY_PLAIN, // Font
+//                    1, // Font size
+//                    TEAL, // Font color
+//                    1); // Font thickness
+//        }
 
         static void drawRotatedRect(RotatedRect rect, Mat drawOn)
         {
